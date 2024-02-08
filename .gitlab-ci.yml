@@ -1,0 +1,74 @@
+image: registry.nexus.dev.lo/testcontainers/agent:1
+
+variables:
+  GIT_DEPTH: 1
+  GRADLE_OPTS: >
+    -Dorg.gradle.daemon=false
+    -Dorg.gradle.caching=true
+    -Dorg.gradle.internal.launcher.welcomeMessageEnabled=false
+  IMAGE_NAME: registry.nexus.dev.lo/testcontainers/database-liquibase
+
+stages:
+  - validate
+
+validate:
+  stage: validate
+  variables:
+    POSTGRES_DB: postgres
+    POSTGRES_USER: user
+    POSTGRES_PASSWORD: password
+    PGPASSWORD: password
+    POSTGRES_SCHEMA: public
+    POSTGRES_PORT: 5432
+  services:
+    - name: registry.nexus.dev.lo/lib/postgres:15-alpine
+      alias: liquibase-postgres
+  artifacts:
+    paths:
+      - database.sql
+    expire_in: 1 day
+  script:
+    - >
+      gradle update validate
+      -Ddb.context=database,schema,test-data 
+      -Ddb.server=liquibase-postgres 
+      -Ddb.name=${POSTGRES_DB} 
+      -Ddb.login=${POSTGRES_USER} 
+      -Ddb.password=${POSTGRES_PASSWORD} 
+      -Ddb.port=${POSTGRES_PORT} 
+      -Ddb.schema=${POSTGRES_SCHEMA}
+    - pg_dump -p 5432 -h localhost --username=${POSTGRES_USER} -d "${POSTGRES_DB}" > database.sql
+  rules:
+    - if: $CI_COMMIT_REF_NAME =~ /^(dev).*$/
+    - if: $CI_MERGE_REQUEST_ID
+
+.build_image_base:
+  image: registry.nexus.dev.lo/lib/buildah:v1.34.0
+  stage: validate
+  needs:
+    - job: validate
+  variables:
+    NEXUS_REGISTRY: registry.nexus.dev.lo
+    BUILDAH_FORMAT: docker
+    STORAGE_DRIVER: vfs
+  before_script:
+    - echo "${CI_BOT_NEXUS_PASSWORD}" | buildah login --tls-verify=false -u "${CI_BOT_NEXUS_USERNAME}" --password-stdin ${NEXUS_REGISTRY}
+  script:
+    - buildah build --tls-verify=false -t "${IMAGE_NAME}:${IMAGE_VERSION}"
+    - buildah images
+    - buildah push --tls-verify=false "${IMAGE_NAME}:${IMAGE_VERSION}"
+
+build_image_dev:
+  extends: .build_image_base
+  variables:
+    IMAGE_VERSION: "dev"
+  rules:
+    - if: $CI_COMMIT_REF_NAME =~ /^(dev).*$/
+
+build_image_feature:
+  extends: .build_image_base
+  variables:
+    IMAGE_VERSION: "MR-$CI_MERGE_REQUEST_ID"
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+      when: manual

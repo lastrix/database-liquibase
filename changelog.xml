@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.25.xsd">
+
+    <changeSet id="init-connection-props-postgresql" runAlways="true" dbms="postgresql" author="lastrix">
+        <sql>
+            SET CLIENT_ENCODING TO 'UTF8';
+            SET SEARCH_PATH TO ${DB_SCHEMA};
+        </sql>
+    </changeSet>
+
+    <!-- Init database for registration -->
+    <include file="schema/v1/.log.xml" relativeToChangelogFile="true" context="database,v1"/>
+
+
+</databaseChangeLog>
